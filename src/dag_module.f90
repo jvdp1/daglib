@@ -36,6 +36,7 @@
         procedure,public :: generate_digraph => dag_generate_digraph
         procedure,public :: generate_dependency_matrix => dag_generate_dependency_matrix
         procedure,public :: save_digraph     => dag_save_digraph
+        procedure,public :: save_digraph_s     => dag_generate_and_save_digraph
         procedure,public :: get_edges        => dag_get_edges
         procedure,public :: get_dependencies => dag_get_dependencies
         procedure,public :: destroy          => dag_destroy
@@ -414,6 +415,94 @@
 
     end subroutine dag_save_digraph
 !*******************************************************************************
+
+!*******************************************************************************
+!>
+!  Generate a Graphviz digraph structure for the DAG and write it simultaneously to a file.
+
+    subroutine dag_generate_and_save_digraph(me,filename,rankdir,dpi)
+
+    implicit none
+
+    class(dag),intent(in) :: me
+    character(len=*),intent(in),optional :: filename !! file name for diagraph
+    character(len=*),intent(in),optional :: rankdir !! right to left orientation (e.g. 'RL')
+    integer,intent(in),optional :: dpi !! resolution (e.g. 300)
+
+    integer :: iunit, istat
+
+    character(len=:),allocatable :: str
+
+    integer :: i,j     !! counter
+    integer :: n_edges !! number of edges
+    character(len=:),allocatable :: attributes,label
+    logical :: has_label, has_attributes
+
+    character(len=*),parameter :: tab = '  '               !! for indenting
+    character(len=*),parameter :: newline = new_line(' ')  !! line break character
+
+
+    if (me%n == 0) return
+
+    open(newunit=iunit,file=filename,status='REPLACE',iostat=istat)
+
+    if (istat==0) then
+        str = 'digraph G {'//newline//newline
+        if (present(rankdir)) &
+            str = str//tab//'rankdir='//rankdir//newline//newline
+        if (present(dpi)) &
+           str = str//tab//'graph [ dpi = '//integer_to_string(dpi)//' ]'//newline//newline
+
+        write(iunit,fmt='(A)',iostat=istat) str
+
+        ! define the vertices:
+        do i=1,me%n
+            has_label      = allocated(me%vertices(i)%label)
+            has_attributes = allocated(me%vertices(i)%attributes)
+            if (has_label) label = 'label="'//trim(adjustl(me%vertices(i)%label))//'"'
+            if (has_label .and. has_attributes) then
+                attributes = '['//trim(adjustl(me%vertices(i)%attributes))//','//label//']'
+            elseif (has_label .and. .not. has_attributes) then
+                attributes = '['//label//']'
+            elseif (.not. has_label .and. has_attributes) then
+                attributes = '['//trim(adjustl(me%vertices(i)%attributes))//']'
+            else ! neither
+                attributes = ''
+            end if
+            !str = str//tab//integer_to_string(i)//' '//attributes//newline
+            str = tab//integer_to_string(i)//' '//attributes//newline
+            if (i==me%n) str = str//newline
+            write(iunit,fmt='(A)',iostat=istat) str
+        end do
+
+        ! define the dependencies:
+        do i=1,me%n
+            if (allocated(me%vertices(i)%edges)) then
+                n_edges = size(me%vertices(i)%edges)
+                !str = str//tab//integer_to_string(i)//' -> '
+                str = tab//integer_to_string(i)//' -> '
+                do j=1,n_edges
+                    ! comma-separated list:
+                    str = str//integer_to_string(me%vertices(i)%edges(j))
+                    if (n_edges>1 .and. j<n_edges) str = str//','
+                end do
+                str = str//';'//newline
+            write(iunit,fmt='(A)',iostat=istat) str
+            end if
+        end do
+
+        !str = str//newline//'}'
+        str = newline//'}'
+        write(iunit,fmt='(A)',iostat=istat) str
+    else
+        write(*,*) 'error opening '//trim(filename)
+    end if
+
+    close(iunit,iostat=istat)
+
+    end subroutine dag_generate_and_save_digraph
+!*******************************************************************************
+
 
 !*******************************************************************************
 !>
